@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Consulta el Estado de tu Reparación</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --primary: #3b82f6;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    
+    .container { width: 100%; max-width: 520px; }
+    
+    .logo-area { text-align: center; margin-bottom: 24px; }
+    .logo-area h1 { font-size: 1.7rem; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+    .logo-area p { font-size: 0.9rem; color: var(--text-muted); margin-top: 6px; }
+
+    .card { background: var(--card-bg); border-radius: 14px; padding: 24px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+    input { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border); background: #0f172a; color: #fff; font-size: 1rem; outline: none; transition: border 0.2s; }
+    input:focus { border-color: var(--primary); }
+
+    button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #2563eb; }
+    button:disabled { background: #475569; cursor: not-allowed; }
+
+    /* Resultados */
+    #resultado { display: none; margin-top: 24px; }
+
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 9999px; font-weight: 700; font-size: 0.85rem; margin-bottom: 20px; }
+    .status-recibido { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .status-taller { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .status-listo { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .status-entregado { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+    /* Timeline de progreso */
+    .timeline { display: flex; justify-content: space-between; position: relative; margin: 30px 0 25px; }
+    .timeline::before { content: ""; position: absolute; top: 14px; left: 10%; right: 10%; height: 3px; background: var(--border); z-index: 1; }
+    .timeline-progress { position: absolute; top: 14px; left: 10%; height: 3px; background: var(--primary); z-index: 2; transition: width 0.4s ease; width: 0%; }
+    .step { position: relative; z-index: 3; text-align: center; width: 25%; }
+    .step-circle { width: 30px; height: 30px; border-radius: 50%; background: var(--card-bg); border: 2px solid var(--border); margin: 0 auto 6px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; color: var(--text-muted); }
+    .step.active .step-circle { border-color: var(--primary); background: var(--primary); color: #fff; }
+    .step.completed .step-circle { border-color: var(--success); background: var(--success); color: #fff; }
+    .step-label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+    .step.active .step-label { color: #fff; }
+
+    /* Detalles */
+    .info-box { background: #0f172a; border-radius: 10px; padding: 16px; border: 1px solid var(--border); margin-bottom: 18px; }
+    .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; }
+    .info-row:last-child { margin-bottom: 0; }
+    .info-label { color: var(--text-muted); }
+    .info-val { font-weight: 600; color: #fff; }
+
+    .price-total { border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px; font-size: 1.1rem; }
+    .price-resta { color: #f87171; font-weight: 800; font-size: 1.2rem; }
+    .price-ok { color: #4ade80; font-weight: 800; }
+
+    .contact-btn { display: flex; align-items: center; justify-content: center; gap: 8px; background: #25d366; color: white; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; margin-top: 14px; }
+    .contact-btn:hover { background: #1eb956; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div class="container">
+    <div class="logo-area">
+      <h1>🛠️ Seguimiento de Reparación</h1>
+      <p>Introduce los datos que figuran en tu comprobante o ticket</p>
+    </div>
+
+    <!-- Buscador -->
+    <div class="card">
+      <form id="searchForm" onsubmit="consultarTicket(event)">
+        <div class="form-group">
+          <label>Nº de Orden / Ticket</label>
+          <input type="text" id="ticketInput" required placeholder="Ej. REP-5432" style="text-transform: uppercase;">
+        </div>
+        <div class="form-group">
+          <label>Últimos 4 dígitos de tu teléfono (por seguridad)</label>
+          <input type="text" id="phoneInput" required maxlength="4" placeholder="Ej. 0404">
+        </div>
+        <button type="submit" id="btnBuscar">Consultar Estado en Directo</button>
+      </form>
+
+      <!-- Panel de Detalles que aparece tras buscar -->
+      <div id="resultado">
+        <div style="text-align: center;">
+          <div id="badgeEstado" class="status-badge"></div>
+        </div>
+
+        <!-- Línea temporal de 4 pasos -->
+        <div class="timeline">
+          <div class="timeline-progress" id="timelineBar"></div>
+          <div class="step" id="step1">
+            <div class="step-circle">1</div>
+            <div class="step-label">Recibido</div>
+          </div>
+          <div class="step" id="step2">
+            <div class="step-circle">2</div>
+            <div class="step-label">En Taller</div>
+          </div>
+          <div class="step" id="step3">
+            <div class="step-circle">3</div>
+            <div class="step-label">Listo</div>
+          </div>
+          <div class="step" id="step4">
+            <div class="step-circle">4</div>
+            <div class="step-label">Entregado</div>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <div class="info-row">
+            <span class="info-label">Dispositivo:</span>
+            <span class="info-val" id="resAparato"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Trabajo / Avería:</span>
+            <span class="info-val" id="resAveria"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Fecha de entrada:</span>
+            <span class="info-val" id="resFecha"></span>
+          </div>
+          <div class="info-row price-total">
+            <span class="info-label">Presupuesto acordado:</span>
+            <span class="info-val" id="resPrecio"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Anticipo entregado:</span>
+            <span class="info-val" id="resAnticipo"></span>
+          </div>
+          <div class="info-row" style="margin-top: 6px;">
+            <span class="info-label" style="font-weight: 700;">Pendiente al recoger:</span>
+            <span class="info-val" id="resResta"></span>
+          </div>
+        </div>
+
+        <div id="mensajeAviso" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.25); padding: 12px; border-radius: 8px; font-size: 0.85rem; color: #93c5fd; text-align: center; margin-bottom: 10px;"></div>
+
+        <a id="btnWhatsapp" href="#" target="_blank" class="contact-btn">
+          <span>💬 Contactar con la tienda</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // CONFIGURACIÓN DE TU PROYECTO SUPABASE
+    // (Pon aquí las mismas 2 claves que en reparaciones.html)
+    // ==========================================
+    const SUPABASE_URL = "https://zmxjxzufyudkcoqszwuv.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpteGp4enVmeXVka2NvcXN6d3V2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM3MjE2OTYsImV4cCI6MjEwOTI5NzY5Nn0.182bubQxnV00dQ-B3vLrxeytpc1HDVy-tNYwYCgSCOQ";
+
+    const supabaseClient = (SUPABASE_URL.startsWith("http") && !SUPABASE_URL.includes("TU_PROYECTO"))
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      : null;
+
+    async function consultarTicket(e) {
+      e.preventDefault();
+      const numTicket = document.getElementById('ticketInput').value.trim().toUpperCase();
+      const ultimosTel = document.getElementById('phoneInput').value.trim();
+      const resDiv = document.getElementById('resultado');
+      const btn = document.getElementById('btnBuscar');
+
+      btn.disabled = true;
+      btn.innerText = "Consultando base de datos...";
+
+      let item = null;
+
+      if (supabaseClient) {
+        // Consulta en la nube en tiempo real
+        const { data, error } = await supabaseClient
+          .from('reparaciones')
+          .select('*')
+          .eq('id', numTicket)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Error al consultar Supabase:", error);
+        }
+
+        // Validación de los 4 últimos dígitos por seguridad
+        if (data && data.telefono && data.telefono.replace(/\s+/g, '').endsWith(ultimosTel)) {
+          item = data;
+        }
+      } else {
+        // Fallback a memoria local si aún no se han configurado las claves
+        const registros = JSON.parse(localStorage.getItem('reparapro_supabase_cache')) || JSON.parse(localStorage.getItem('reparapro_data_final')) || [];
+        item = registros.find(r => r.id.toUpperCase() === numTicket && (r.telefono || '').replace(/\s+/g, '').endsWith(ultimosTel));
+      }
+
+      btn.disabled = false;
+      btn.innerText = "Consultar Estado en Directo";
+
+      if (!item) {
+        alert("No se ha encontrado ninguna orden con el ticket #" + numTicket + " y esa terminación de teléfono. Por favor revísalos.");
+        resDiv.style.display = 'none';
+        return;
+      }
+
+      // Rellenar datos
+      document.getElementById('resAparato').innerText = item.aparato;
+      document.getElementById('resAveria').innerText = item.averia;
+      document.getElementById('resFecha').innerText = item.fecha;
+      document.getElementById('resPrecio').innerText = Number(item.precio || 0).toFixed(2) + ' €';
+      document.getElementById('resAnticipo').innerText = Number(item.anticipo || 0).toFixed(2) + ' €';
+
+      const resta = Number(item.precio || 0) - Number(item.anticipo || 0);
+      const restaEl = document.getElementById('resResta');
+      if (resta > 0) {
+        restaEl.className = "info-val price-resta";
+        restaEl.innerText = resta.toFixed(2) + ' €';
+      } else {
+        restaEl.className = "info-val price-ok";
+        restaEl.innerText = '0.00 € (Abonado)';
+      }
+
+      actualizarProgreso(item.estado);
+
+      // Enlace a WhatsApp con tu número preconfigurado
+      const miNumeroWhatsApp = "34658510404";
+      const mensajeWA = encodeURIComponent(`Hola, consulto por mi orden #${item.id} (${item.aparato}).`);
+      document.getElementById('btnWhatsapp').href = `https://wa.me/${miNumeroWhatsApp}?text=${mensajeWA}`;
+
+      resDiv.style.display = 'block';
+    }
+
+    function actualizarProgreso(estado) {
+      const badge = document.getElementById('badgeEstado');
+      const bar = document.getElementById('timelineBar');
+      const aviso = document.getElementById('mensajeAviso');
+
+      const s1 = document.getElementById('step1');
+      const s2 = document.getElementById('step2');
+      const s3 = document.getElementById('step3');
+      const s4 = document.getElementById('step4');
+
+      [s1, s2, s3, s4].forEach(s => s.className = 'step');
+
+      if (estado === 'Recibido') {
+        badge.className = 'status-badge status-recibido';
+        badge.innerHTML = '📥 En espera de revisión técnica';
+        bar.style.width = '0%';
+        s1.classList.add('active');
+        aviso.innerText = "Tu equipo ha sido registrado y está a la espera de entrar al banco de pruebas.";
+      } else if (estado === 'En Reparación') {
+        badge.className = 'status-badge status-taller';
+        badge.innerHTML = '⚙️ Técnico trabajando en el equipo';
+        bar.style.width = '33%';
+        s1.classList.add('completed');
+        s2.classList.add('active');
+        aviso.innerText = "Estamos realizando la reparación o esperando la pieza de repuesto.";
+      } else if (estado === 'Listo para recoger') {
+        badge.className = 'status-badge status-listo';
+        badge.innerHTML = '✅ ¡Listo para entrega!';
+        bar.style.width = '66%';
+        s1.classList.add('completed');
+        s2.classList.add('completed');
+        s3.classList.add('active');
+        aviso.innerHTML = "<strong>¡Reparación finalizada con éxito!</strong> Ya puedes pasar por tienda a retirarlo en nuestro horario habitual.";
+      } else if (estado === 'Entregado') {
+        badge.className = 'status-badge status-entregado';
+        badge.innerHTML = '📦 Reparación cerrada y entregada';
+        bar.style.width = '100%';
+        [s1, s2, s3, s4].forEach(s => s.classList.add('completed'));
+        aviso.innerText = "Este equipo ya fue retirado de nuestras instalaciones.";
+      }
+    }
+
+    // Auto-rellenar si entra leyendo el QR
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ticketParam = urlParams.get('ticket');
+      if (ticketParam) {
+        document.getElementById('ticketInput').value = ticketParam.toUpperCase();
+        document.getElementById('phoneInput').focus();
+      }
+    });
+  </script>
+</body>
+</html>
